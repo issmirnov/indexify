@@ -60,6 +60,7 @@ pub type ExtractionEventId = String;
 pub type ExtractionPolicyId = String;
 pub type ExtractorName = String;
 pub type ContentType = String;
+pub type ExtractionGraphId = String;
 pub type SchemaId = String;
 
 pub mod requests;
@@ -96,6 +97,7 @@ pub enum StateMachineColumns {
     StructuredDataSchemas,              //  SchemaId -> StructuredDataSchema
     ExtractionPoliciesAppliedOnContent, //  ContentId -> Vec<ExtractionPolicyIds>
     CoordinatorAddress,                 //  NodeId -> Coordinator address
+    ExtractionGraphs,                   //  ExtractionGraphId -> ExtractionGraph
 }
 
 impl StateMachineColumns {
@@ -470,7 +472,9 @@ impl StateMachineStore {
         self.data.indexify_state.get_executor_running_task_count()
     }
 
-    pub async fn get_schemas_by_namespace(&self) -> HashMap<NamespaceName, HashSet<SchemaId>> {
+    pub async fn get_schemas_by_namespace(
+        &self,
+    ) -> HashMap<NamespaceName, HashSet<ExtractionGraphId>> {
         self.data.indexify_state.get_schemas_by_namespace()
     }
 

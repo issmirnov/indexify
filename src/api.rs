@@ -631,3 +631,15 @@ pub struct IngestRemoteFileResponse {
 pub struct TaskAssignments {
     pub assignments: HashMap<String, String>,
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ExtractionGraphRequest {
+    pub namespace: String,
+    pub name: String,
+    pub policies: Vec<ExtractionPolicy>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ExtractionGraphResponse {
+    pub indexes: Vec<String>,
+}
