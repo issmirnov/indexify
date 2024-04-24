@@ -633,6 +633,11 @@ pub struct TaskAssignments {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct UploadFileResponse {
+    pub content_id: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ExtractionGraphRequest {
     pub namespace: String,
     pub name: String,
