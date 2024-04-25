@@ -4,8 +4,7 @@ use anyhow::{anyhow, Ok, Result};
 use axum::{http::StatusCode, Json};
 use indexify_internal_api::StructuredDataSchema;
 use indexify_proto::indexify_coordinator::{
-    self,
-    coordinator_service_client::CoordinatorServiceClient,
+    self, coordinator_service_client::CoordinatorServiceClient,
 };
 use itertools::Itertools;
 use tokio::sync::Mutex;
@@ -118,10 +117,10 @@ impl CoordinatorClient {
             .schemas
             .into_iter()
             .map(|schema| StructuredDataSchema {
+                id: "".to_string(),
+                extraction_graph_name: schema.extraction_graph_name,
                 namespace: namespace.to_string(),
                 columns: serde_json::from_str(&schema.columns).unwrap(),
-                content_source: schema.content_source,
-                id: "".to_string(),
             })
             .collect_vec();
         Ok(schemas)
