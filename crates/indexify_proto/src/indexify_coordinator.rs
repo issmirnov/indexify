@@ -521,6 +521,8 @@ pub struct ContentMetadata {
         ::prost::alloc::string::String,
         u64,
     >,
+    #[prost(string, repeated, tag = "13")]
+    pub extraction_graph_names: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
 #[derive(serde::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
