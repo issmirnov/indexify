@@ -105,6 +105,7 @@ jobs:
     runs-on: windows-latest-large
     steps:
       - uses: actions/checkout@v4
+      - uses: ilammy/setup-nasm@v1
       - run: rustup toolchain install nightly --component rustfmt
       - run: cargo +nightly fmt --check
       - run: choco install protoc
