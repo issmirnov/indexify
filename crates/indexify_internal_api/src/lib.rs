@@ -770,7 +770,7 @@ pub type NamespaceName = String;
 pub struct ContentMetadata {
     pub id: ContentMetadataId,
     pub parent_id: ContentMetadataId,
-    pub root_content_id: String,
+    pub root_content_id: ContentMetadataId,
     pub namespace: NamespaceName,
     pub name: String,
     pub content_type: String,
@@ -799,7 +799,10 @@ impl ContentMetadata {
                 id: value.parent_id,
                 version: 1,
             },
-            root_content_id: value.root_content_id,
+            root_content_id: ContentMetadataId {
+                id: value.root_content_id,
+                version: 1,
+            },
             name: value.file_name,
             content_type: value.mime,
             labels: value.labels,
@@ -822,6 +825,7 @@ impl ContentMetadata {
         indexify_coordinator::ContentMetadata {
             id: value.id.id,
             parent_id: value.parent_id.id,
+            root_content_id: value.root_content_id.id,
             file_name: value.name,
             mime: value.content_type,
             labels: value.labels,
@@ -837,26 +841,6 @@ impl ContentMetadata {
     }
 }
 
-// impl From<ContentMetadata> for indexify_coordinator::ContentMetadata {
-//     fn from(value: ContentMetadata) -> Self {
-//         Self {
-//             id: value.id.id,
-//             parent_id: value.parent_id.id,
-//             file_name: value.name,
-//             mime: value.content_type,
-//             labels: value.labels,
-//             storage_url: value.storage_url,
-//             created_at: value.created_at,
-//             namespace: value.namespace,
-//             source: value.source,
-//             size_bytes: value.size_bytes,
-//             hash: value.hash,
-//             extraction_policy_ids: value.extraction_policy_ids,
-//             extraction_graph_names: vec![],
-//         }
-//     }
-// }
-
 impl Default for ContentMetadata {
     fn default() -> Self {
         Self {
@@ -865,7 +849,7 @@ impl Default for ContentMetadata {
                 id: "".to_string(),
                 ..Default::default()
             },
-            root_content_id: ContentMetadataId::default().id,
+            root_content_id: ContentMetadataId::default(),
             namespace: "test_namespace".to_string(),
             name: "test_name".to_string(),
             content_type: "test_content_type".to_string(),
