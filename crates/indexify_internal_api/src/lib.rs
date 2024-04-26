@@ -770,6 +770,7 @@ pub type NamespaceName = String;
 pub struct ContentMetadata {
     pub id: ContentMetadataId,
     pub parent_id: ContentMetadataId,
+    pub root_content_id: String,
     pub namespace: NamespaceName,
     pub name: String,
     pub content_type: String,
@@ -798,6 +799,7 @@ impl ContentMetadata {
                 id: value.parent_id,
                 version: 1,
             },
+            root_content_id: value.root_content_id,
             name: value.file_name,
             content_type: value.mime,
             labels: value.labels,
@@ -863,6 +865,7 @@ impl Default for ContentMetadata {
                 id: "".to_string(),
                 ..Default::default()
             },
+            root_content_id: ContentMetadataId::default().id,
             namespace: "test_namespace".to_string(),
             name: "test_name".to_string(),
             content_type: "test_content_type".to_string(),

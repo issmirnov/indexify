@@ -521,6 +521,8 @@ pub struct ContentMetadata {
         ::prost::alloc::string::String,
         u64,
     >,
+    #[prost(string, tag = "13")]
+    pub root_content_id: ::prost::alloc::string::String,
     #[prost(string, repeated, tag = "13")]
     pub extraction_graph_names: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }

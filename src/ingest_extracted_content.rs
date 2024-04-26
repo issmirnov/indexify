@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use anyhow::{anyhow, Result};
+use axum::extract::ws;
 use axum_typed_websockets::{Message, WebSocket};
 use indexify_proto::indexify_coordinator;
 use sha2::{
@@ -18,6 +19,20 @@ use crate::{
     api::*, blob_storage::StoragePartWriter, data_manager::DataManager,
     server::NamespaceEndpointState,
 };
+
+// Web socket status codes start with 1000, 1000 and 1001 is success.
+const WS_PROTOCOL_ERROR: u16 = 1002;
+
+fn msg_type_str(msg: &IngestExtractedContent) -> &'static str {
+    match msg {
+        IngestExtractedContent::BeginExtractedContentIngest(_) => "BeginExtractedContentIngest",
+        IngestExtractedContent::BeginMultipartContent(_) => "BeginMultipartContent",
+        IngestExtractedContent::MultipartContentFrame(_) => "MultipartContentFrame",
+        IngestExtractedContent::FinishMultipartContent(_) => "FinishMultipartContent",
+        IngestExtractedContent::ExtractedFeatures(_) => "ExtractedFeatures",
+        IngestExtractedContent::FinishExtractedContentIngest(_) => "FinishExtractedContentIngest",
+    }
+}
 
 #[derive(Debug)]
 struct Writing {
@@ -125,6 +140,7 @@ impl ContentStateWriting {
         payload: FinishContent,
     ) -> Result<String> {
         let mut labels = self.content_metadata().labels.clone();
+        let root_content_id = self.content_metadata().root_content_id.clone();
         match &mut self.frame_state {
             FrameState::New => Err(anyhow!(
                 "received finish content without any content frames"
@@ -139,6 +155,7 @@ impl ContentStateWriting {
                     id: id.clone(),
                     file_name: frame_state.file_name.clone(),
                     parent_id: self.ingest_metadata.parent_content_id.clone(),
+                    root_content_id,
                     namespace: self.ingest_metadata.namespace.clone(),
                     mime: payload.content_type,
                     size_bytes: frame_state.file_size,
@@ -273,52 +290,67 @@ impl IngestExtractedContentState {
         mut self,
         mut socket: WebSocket<IngestExtractedContentResponse, IngestExtractedContent>,
     ) {
-        let _ = socket.send(Message::Ping(vec![])).await;
         while let Some(msg) = socket.recv().await {
-            if let Err(err) = &msg {
-                tracing::error!("error receiving message: {:?}", err);
-                return;
-            }
-            if let Ok(Message::Item(msg)) = msg {
-                match msg {
-                    IngestExtractedContent::BeginExtractedContentIngest(payload) => {
-                        if let Err(e) = self.begin(payload).await {
-                            tracing::error!("Error beginning extraction ingest: {}", e);
-                            return;
+            match msg {
+                Ok(Message::Item(msg)) => {
+                    let msg_type = msg_type_str(&msg);
+                    let res = match msg {
+                        IngestExtractedContent::BeginExtractedContentIngest(payload) => {
+                            self.begin(payload).await
                         }
-                    }
-                    IngestExtractedContent::BeginMultipartContent(_) => {
-                        if let Err(e) = self.begin_multipart_content().await {
-                            tracing::error!("Error beginning multipart content: {}", e);
-                            return;
+                        IngestExtractedContent::BeginMultipartContent(_) => {
+                            self.begin_multipart_content().await
                         }
-                    }
-                    IngestExtractedContent::MultipartContentFrame(payload) => {
-                        if let Err(e) = self.write_content_frame(payload).await {
-                            tracing::error!("Error handling content frame: {}", e);
-                            return;
+                        IngestExtractedContent::MultipartContentFrame(payload) => {
+                            self.write_content_frame(payload).await
                         }
-                    }
-                    IngestExtractedContent::FinishMultipartContent(payload) => {
-                        if let Err(e) = self.finish_content(payload).await {
-                            tracing::error!("Error finishing extacted content: {}", e);
-                            return;
+                        IngestExtractedContent::FinishMultipartContent(payload) => {
+                            match self.finish_content(payload).await {
+                                Ok(_) => Ok(()),
+                                Err(e) => Err(e),
+                            }
                         }
-                    }
-                    IngestExtractedContent::ExtractedFeatures(payload) => {
-                        if let Err(e) = self.write_features(payload).await {
-                            tracing::error!("Error handling extracted features: {}", e);
-                            return;
+                        IngestExtractedContent::ExtractedFeatures(payload) => {
+                            self.write_features(payload).await
                         }
-                    }
-                    IngestExtractedContent::FinishExtractedContentIngest(_payload) => {
-                        if let Err(e) = self.finish().await {
-                            tracing::error!("Error finishing extraction ingest: {}", e);
-                            return;
+                        IngestExtractedContent::FinishExtractedContentIngest(_) => {
+                            let res = self.finish().await;
+                            let msg = match res {
+                                Ok(_) => IngestExtractedContentResponse::Success,
+                                Err(e) => IngestExtractedContentResponse::Error(e.to_string()),
+                            };
+                            let _ = socket.send(Message::Item(msg)).await;
+                            break;
                         }
-                        return;
+                    };
+                    if let Err(e) = res {
+                        tracing::error!("Error handling message {:?} {:?}", msg_type, e);
+                        let _ = socket
+                            .send(Message::Close(Some(ws::CloseFrame {
+                                code: WS_PROTOCOL_ERROR,
+                                reason: e.to_string().into(),
+                            })))
+                            .await;
+                        break;
                     }
-                };
+                }
+                Ok(Message::Close(_)) => {
+                    break;
+                }
+                Ok(Message::Ping(data)) => {
+                    let _ = socket.send(Message::Pong(data)).await;
+                }
+                Ok(Message::Pong(_)) => {}
+                Err(err) => {
+                    tracing::error!("error receiving message: {:?}", err);
+                    let _ = socket
+                        .send(Message::Close(Some(ws::CloseFrame {
+                            code: WS_PROTOCOL_ERROR,
+                            reason: "invalid message".into(),
+                        })))
+                        .await;
+                    break;
+                }
             }
         }
     }
@@ -405,6 +437,7 @@ mod tests {
                 id: ContentMetadataId::new(&"1"),
                 name: "test".to_string(),
                 parent_id: ContentMetadataId::new(""),
+                root_content_id: "1".to_string(),
                 namespace: "test".to_string(),
                 content_type: "text/plain".to_string(),
                 storage_url: "test".to_string(),
@@ -689,6 +722,7 @@ mod tests {
             .create_task(Task::new("test_1", content_metadata.first().unwrap()))
             .await
             .unwrap();
+        assert_eq!(content_metadata.first().unwrap().root_content_id, "1");
 
         let payload = BeginExtractedContentIngest {
             task_id: "test_1".to_string(),
