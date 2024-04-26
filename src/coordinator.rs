@@ -49,6 +49,114 @@ impl Coordinator {
         })
     }
 
+    //  START CONVERSION METHODS
+    pub fn internal_content_metadata_to_external(
+        &self,
+        content_list: Vec<internal_api::ContentMetadata>,
+    ) -> Result<Vec<indexify_coordinator::ContentMetadata>> {
+        let mut content_meta_list = Vec::new();
+        for content in content_list {
+            let extraction_graphs = self
+                .shared_state
+                .get_extraction_graphs(&content.extraction_graph_ids)?
+                .ok_or_else(|| {
+                    anyhow!("could not find extraction graph for content {}", content.id)
+                })?;
+            let extraction_graph_names = extraction_graphs.into_iter().map(|eg| eg.name).collect();
+            let content: indexify_coordinator::ContentMetadata =
+                internal_api::ContentMetadata::to_coordinator_metadata(
+                    content,
+                    extraction_graph_names,
+                );
+            content_meta_list.push(content.clone());
+        }
+        Ok(content_meta_list)
+    }
+
+    pub fn external_content_metadata_to_internal(
+        &self,
+        content_list: Vec<indexify_coordinator::ContentMetadata>,
+    ) -> Result<Vec<internal_api::ContentMetadata>> {
+        let mut content_meta_list = Vec::new();
+        for content in content_list {
+            let extraction_graphs = self
+                .shared_state
+                .get_extraction_graphs_by_name(&content.namespace, &content.extraction_graph_names)?
+                .ok_or_else(|| {
+                    anyhow!("could not find extraction graph for content {}", content.id)
+                })?;
+            let extraction_graph_ids = extraction_graphs.into_iter().map(|eg| eg.id).collect();
+
+            let content: internal_api::ContentMetadata =
+                internal_api::ContentMetadata::from_coordinator_metadata(
+                    content,
+                    extraction_graph_ids,
+                );
+            content_meta_list.push(content.clone());
+        }
+        Ok(content_meta_list)
+    }
+
+    pub fn internal_extraction_policy_to_external(
+        &self,
+        policy_list: Vec<internal_api::ExtractionPolicy>,
+    ) -> Result<Vec<indexify_coordinator::ExtractionPolicy>> {
+        let mut policies_to_return = Vec::new();
+        for policy in policy_list {
+            match policy.content_source {
+                internal_api::ContentSource::ExtractionPolicyId(ref extraction_policy_id) => {
+                    let parent_policy = self
+                        .shared_state
+                        .get_extraction_policy(extraction_policy_id)?;
+                    policies_to_return.push(internal_api::ExtractionPolicy::to_coordinator_policy(
+                        policy,
+                        parent_policy.name,
+                    ));
+                }
+                internal_api::ContentSource::ExtractionGraphId(ref extraction_graph_id) => {
+                    let extraction_graph = self
+                        .shared_state
+                        .get_extraction_graphs(&vec![extraction_graph_id.clone()])?
+                        .ok_or_else(|| {
+                            anyhow!(
+                                "could not find extraction graph with id: {}",
+                                extraction_graph_id
+                            )
+                        })?;
+                    let extraction_graph = extraction_graph.first().ok_or_else(|| {
+                        anyhow!(
+                            "could not find extraction graph with id: {}",
+                            extraction_graph_id
+                        )
+                    })?;
+                    policies_to_return.push(internal_api::ExtractionPolicy::to_coordinator_policy(
+                        policy,
+                        extraction_graph.name.clone(),
+                    ));
+                }
+                _ => {}
+            }
+        }
+        Ok(policies_to_return)
+    }
+
+    pub fn internal_namespace_to_external(
+        &self,
+        namespaces: Vec<internal_api::Namespace>,
+    ) -> Result<Vec<indexify_coordinator::Namespace>> {
+        let mut namespaces_to_return: Vec<indexify_coordinator::Namespace> = Vec::new();
+        for namespace in namespaces {
+            let extraction_policies =
+                self.internal_extraction_policy_to_external(namespace.extraction_policies.clone())?;
+            namespaces_to_return.push(indexify_internal_api::Namespace::to_coordinator_namespace(
+                namespace,
+                extraction_policies,
+            ));
+        }
+        Ok(namespaces_to_return)
+    }
+    //  END CONVERSION METHODS
+
     pub async fn list_content(
         &self,
         namespace: &str,
@@ -311,11 +419,11 @@ impl Coordinator {
         Ok(content_tree)
     }
 
-    pub async fn get_extractor(
+    pub fn get_extractor(
         &self,
         extractor_name: &str,
     ) -> Result<internal_api::ExtractorDescription> {
-        self.shared_state.extractor_with_name(extractor_name).await
+        self.shared_state.extractor_with_name(extractor_name)
     }
 
     pub async fn create_policy(
@@ -330,7 +438,7 @@ impl Coordinator {
             .shared_state
             .get_structured_data_schema(
                 &extraction_policy.namespace,
-                &extraction_policy.content_source,
+                &String::from(&extraction_policy.content_source),
             )
             .await?;
         let mut updated_schema = None;
@@ -354,7 +462,7 @@ impl Coordinator {
         let structured_data_schema = StructuredDataSchema::default();
         let mut indexes_to_create = Vec::new();
         for extraction_policy in &extraction_policies {
-            let extractor = self.get_extractor(&extraction_policy.extractor).await?;
+            let extractor = self.get_extractor(&extraction_policy.extractor)?;
             if extractor.input_params != serde_json::Value::Null {
                 extractor.validate_input_params(&extraction_policy.input_params)?;
             }
@@ -552,53 +660,6 @@ impl Coordinator {
         self.shared_state.get_state_change_watcher()
     }
 
-    pub fn internal_content_metadata_to_external(
-        &self,
-        content_list: Vec<internal_api::ContentMetadata>,
-    ) -> Result<Vec<indexify_coordinator::ContentMetadata>> {
-        let mut content_meta_list = Vec::new();
-        for content in content_list {
-            let extraction_graphs = self
-                .shared_state
-                .get_extraction_graphs(&content.extraction_graph_ids)?
-                .ok_or_else(|| {
-                    anyhow!("could not find extraction graph for content {}", content.id)
-                })?;
-            let extraction_graph_names = extraction_graphs.into_iter().map(|eg| eg.name).collect();
-            let content: indexify_coordinator::ContentMetadata =
-                internal_api::ContentMetadata::to_coordinator_metadata(
-                    content,
-                    extraction_graph_names,
-                );
-            content_meta_list.push(content.clone());
-        }
-        Ok(content_meta_list)
-    }
-
-    pub fn external_content_metadata_to_internal(
-        &self,
-        content_list: Vec<indexify_coordinator::ContentMetadata>,
-    ) -> Result<Vec<internal_api::ContentMetadata>> {
-        let mut content_meta_list = Vec::new();
-        for content in content_list {
-            let extraction_graphs = self
-                .shared_state
-                .get_extraction_graphs_by_name(&content.namespace, &content.extraction_graph_names)?
-                .ok_or_else(|| {
-                    anyhow!("could not find extraction graph for content {}", content.id)
-                })?;
-            let extraction_graph_ids = extraction_graphs.into_iter().map(|eg| eg.id).collect();
-
-            let content: internal_api::ContentMetadata =
-                internal_api::ContentMetadata::from_coordinator_metadata(
-                    content,
-                    extraction_graph_ids,
-                );
-            content_meta_list.push(content.clone());
-        }
-        Ok(content_meta_list)
-    }
-
     pub async fn create_content_metadata(
         &self,
         content_list: Vec<indexify_coordinator::ContentMetadata>,
@@ -745,7 +806,9 @@ mod tests {
                         "test_output".to_string(),
                         "test_namespace.test.test_output".to_string(),
                     )]),
-                    content_source: "ingestion".to_string(),
+                    content_source: internal_api::ContentSource::ExtractionPolicyId(
+                        "ingestion".to_string(),
+                    ),
                 },
                 mock_extractor(),
             )
@@ -834,7 +897,9 @@ mod tests {
                 "test_output".to_string(),
                 "test_namespace.test.test_output".to_string(),
             )]),
-            content_source: "ingestion".to_string(),
+            content_source: internal_api::ContentSource::ExtractionPolicyId(
+                "ingestion".to_string(),
+            ),
             ..Default::default()
         };
         coordinator
@@ -883,7 +948,9 @@ mod tests {
                 "test_output".to_string(),
                 "test_namespace.test.test_output".to_string(),
             )]),
-            content_source: extraction_policy_1.name,
+            content_source: internal_api::ContentSource::ExtractionPolicyId(
+                extraction_policy_1.name,
+            ),
             ..Default::default()
         };
         coordinator
@@ -961,7 +1028,9 @@ mod tests {
                 "test_output".to_string(),
                 "test_namespace.test.test_output".to_string(),
             )]),
-            content_source: "ingestion".to_string(),
+            content_source: internal_api::ContentSource::ExtractionPolicyId(
+                "ingestion".to_string(),
+            ),
             ..Default::default()
         };
         coordinator
@@ -1013,7 +1082,9 @@ mod tests {
                 "test_output".to_string(),
                 "test_namespace.test.test_output".to_string(),
             )]),
-            content_source: extraction_policy_1.name,
+            content_source: internal_api::ContentSource::ExtractionPolicyId(
+                extraction_policy_1.name,
+            ),
             ..Default::default()
         };
         coordinator
@@ -1075,7 +1146,9 @@ mod tests {
                 "test_output".to_string(),
                 "test_namespace.test.test_output".to_string(),
             )]),
-            content_source: "ingestion".to_string(),
+            content_source: internal_api::ContentSource::ExtractionPolicyId(
+                "ingestion".to_string(),
+            ),
             ..Default::default()
         };
         coordinator
@@ -1097,7 +1170,9 @@ mod tests {
                 "test_output".to_string(),
                 "test_namespace.test.test_output".to_string(),
             )]),
-            content_source: extraction_policy_1.name,
+            content_source: internal_api::ContentSource::ExtractionPolicyId(
+                extraction_policy_1.name,
+            ),
             ..Default::default()
         };
         coordinator
@@ -1201,7 +1276,9 @@ mod tests {
                 "test_output".to_string(),
                 "test_namespace.test.test_output".to_string(),
             )]),
-            content_source: "ingestion".to_string(),
+            content_source: internal_api::ContentSource::ExtractionPolicyId(
+                "ingestion".to_string(),
+            ),
             ..Default::default()
         };
         coordinator
@@ -1223,7 +1300,9 @@ mod tests {
                 "test_output".to_string(),
                 "test_namespace.test.test_output".to_string(),
             )]),
-            content_source: extraction_policy_1.name,
+            content_source: internal_api::ContentSource::ExtractionPolicyId(
+                extraction_policy_1.name,
+            ),
             ..Default::default()
         };
         coordinator
@@ -1389,7 +1468,9 @@ mod tests {
                 "test_output".to_string(),
                 "test_namespace.test.test_output".to_string(),
             )]),
-            content_source: "ingestion".to_string(),
+            content_source: internal_api::ContentSource::ExtractionPolicyId(
+                "ingestion".to_string(),
+            ),
             ..Default::default()
         };
         coordinator
@@ -1507,7 +1588,9 @@ mod tests {
                 "test_output".to_string(),
                 "test_namespace.test.test_output".to_string(),
             )]),
-            content_source: "ingestion".to_string(),
+            content_source: internal_api::ContentSource::ExtractionPolicyId(
+                "ingestion".to_string(),
+            ),
             ..Default::default()
         };
         coordinator
@@ -1530,7 +1613,9 @@ mod tests {
                 "test_output".to_string(),
                 "test_namespace.test.test_output".to_string(),
             )]),
-            content_source: extraction_policy_1.name,
+            content_source: internal_api::ContentSource::ExtractionPolicyId(
+                extraction_policy_1.name,
+            ),
             ..Default::default()
         };
         coordinator
@@ -1672,7 +1757,9 @@ mod tests {
                 "test.test_output".to_string(),
                 "test_namespace.test.test_output".to_string(),
             )]),
-            content_source: "ingestion".to_string(),
+            content_source: internal_api::ContentSource::ExtractionPolicyId(
+                "ingestion".to_string(),
+            ),
             ..Default::default()
         };
         coordinator
@@ -1695,7 +1782,9 @@ mod tests {
                 "test.test_output".to_string(),
                 "test_namespace.test.test_output".to_string(),
             )]),
-            content_source: extraction_policy_1.name,
+            content_source: internal_api::ContentSource::ExtractionPolicyId(
+                extraction_policy_1.name,
+            ),
             ..Default::default()
         };
         coordinator
@@ -1948,7 +2037,7 @@ mod tests {
         //  Create the extraction policy under the namespace of the content
         let extraction_policy = indexify_internal_api::ExtractionPolicy {
             namespace: namespace.into(),
-            content_source: "source".into(),
+            content_source: internal_api::ContentSource::ExtractionPolicyId("source".to_string()),
             extractor: extractor_name.into(),
             id: "1".into(),
             name: "1".into(),
@@ -2018,7 +2107,7 @@ mod tests {
             id: "2".into(),
             name: "2".into(),
             namespace: namespace.into(),
-            content_source: "source".into(),
+            content_source: internal_api::ContentSource::ExtractionPolicyId("source".to_string()),
             extractor: extractor_name.into(),
             filters: vec![("label1".to_string(), "value1".to_string())]
                 .into_iter()

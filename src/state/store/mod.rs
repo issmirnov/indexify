@@ -11,7 +11,9 @@ use std::{
 use anyhow::Result;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use flate2::bufread::ZlibDecoder;
-use indexify_internal_api::{ContentMetadata, ExecutorMetadata, StateChange, StructuredDataSchema};
+use indexify_internal_api::{
+    ContentMetadata, ExecutorMetadata, NamespaceName, StateChange, StructuredDataSchema,
+};
 use openraft::{
     storage::{LogFlushed, LogState, RaftLogStorage, RaftStateMachine, Snapshot},
     AnyError, BasicNode, Entry, EntryPayload, ErrorSubject, ErrorVerb, LogId, OptionalSend,
@@ -38,7 +40,6 @@ use crate::{
     utils::OptionInspectNone,
 };
 
-pub type NamespaceName = String;
 pub type TaskId = String;
 pub type StateChangeId = String;
 pub type ContentId = String;
@@ -292,7 +293,7 @@ impl StateMachineStore {
     }
 
     /// This method fetches a key from a specific column family
-    pub async fn get_from_cf<T, K>(
+    pub fn get_from_cf<T, K>(
         &self,
         column: StateMachineColumns,
         key: K,
