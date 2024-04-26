@@ -1870,9 +1870,10 @@ mod tests {
         //  Create the extraction policy under the namespace of the content
         let extraction_policy = indexify_internal_api::ExtractionPolicy {
             namespace: content_metadata.namespace.clone(),
-            content_source: indexify_internal_api::ContentSource::ExtractionPolicyId(
-                "source".to_string(),
-            ),
+            content_source:
+                indexify_internal_api::ExtractionPolicyContentSource::ExtractionPolicyId(
+                    "source".to_string(),
+                ),
             extractor: extractor.name,
             filters: vec![
                 ("label1".to_string(), "value1".to_string()),
@@ -1994,9 +1995,10 @@ mod tests {
         //  Create the extraction policy under the namespace of the content
         let extraction_policy = indexify_internal_api::ExtractionPolicy {
             namespace: namespace.into(),
-            content_source: indexify_internal_api::ContentSource::ExtractionPolicyId(
-                "source".to_string(),
-            ),
+            content_source:
+                indexify_internal_api::ExtractionPolicyContentSource::ExtractionPolicyId(
+                    "source".to_string(),
+                ),
             extractor: extractor.name,
             filters: vec![("label1".to_string(), "value1".to_string())]
                 .into_iter()
