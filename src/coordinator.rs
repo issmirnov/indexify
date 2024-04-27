@@ -87,10 +87,54 @@ impl Coordinator {
                 })?;
             let extraction_graph_ids = extraction_graphs.into_iter().map(|eg| eg.id).collect();
 
+            let mut source_ids: Vec<internal_api::ContentMetadataSource> = Vec::new();
+            for source in &content.source {
+                let extraction_graphs = self
+                    .shared_state
+                    .get_extraction_graphs_by_name(&content.namespace, &[source.to_string()])?;
+                if extraction_graphs.is_none() {
+                    //  check for extraction policies
+                    let extraction_policies = self
+                        .shared_state
+                        .get_extraction_policies_from_names(&content.namespace, &content.source)?;
+                    if extraction_policies.is_none() {
+                        return Err(anyhow!(
+                            "could not find extraction graph or extraction policy for content {} and source {}",
+                            content.id, source
+                        ));
+                    } else {
+                        let source_id = extraction_policies.unwrap();
+                        let source_id = source_id.first().ok_or_else(|| {
+                            anyhow!(
+                                "could not find extraction policy for content {} and source {}",
+                                content.id,
+                                source
+                            )
+                        })?;
+                        source_ids.push(internal_api::ContentMetadataSource::ExtractionPolicyId(
+                            source_id.id.clone(),
+                        ));
+                    }
+                } else {
+                    let source_id = extraction_graphs.unwrap();
+                    let source_id = source_id.first().ok_or_else(|| {
+                        anyhow!(
+                            "could not find extraction graph for content {} and source {}",
+                            content.id,
+                            source
+                        )
+                    })?;
+                    source_ids.push(internal_api::ContentMetadataSource::ExtractionGraphId(
+                        source_id.id.clone(),
+                    ));
+                }
+            }
+
             let content: internal_api::ContentMetadata =
                 internal_api::ContentMetadata::from_coordinator_metadata(
                     content,
                     extraction_graph_ids,
+                    source_ids,
                 );
             content_meta_list.push(content.clone());
         }
@@ -166,11 +210,12 @@ impl Coordinator {
         source: &str,
         parent_id: &str,
         labels_eq: &HashMap<String, String>,
-    ) -> Result<Vec<internal_api::ContentMetadata>> {
-        let content = self.shared_state.list_content(namespace).await?.into_iter();
+    ) -> Result<Vec<indexify_coordinator::ContentMetadata>> {
+        let content = self.shared_state.list_content(namespace)?;
+        let content = self.internal_content_metadata_to_external(content)?;
         list_content_filter(content, source, parent_id, labels_eq)
             .map(Ok)
-            .collect::<Result<Vec<internal_api::ContentMetadata>>>()
+            .collect::<Result<Vec<indexify_coordinator::ContentMetadata>>>()
     }
 
     pub async fn list_policies(
@@ -773,7 +818,7 @@ mod tests {
                 created_at: 0,
                 storage_url: "test".to_string(),
                 labels: HashMap::new(),
-                source: "ingestion".to_string(),
+                source: vec!["ingestion".to_string()],
                 size_bytes: 100,
                 hash: "".to_string(),
                 extraction_policy_ids: HashMap::new(),
@@ -847,7 +892,7 @@ mod tests {
                 created_at: 0,
                 storage_url: "test2".to_string(),
                 labels: HashMap::new(),
-                source: "some_extractor_produced_this".to_string(),
+                source: vec!["ingestion".to_string()],
                 size_bytes: 100,
                 hash: "".to_string(),
                 extraction_policy_ids: HashMap::new(),
@@ -921,7 +966,7 @@ mod tests {
             created_at: 0,
             storage_url: "test_storage_url".to_string(),
             labels: HashMap::new(),
-            source: "ingestion".to_string(),
+            source: vec!["ingestion".to_string()],
             size_bytes: 100,
             hash: "".to_string(),
             ..Default::default()
@@ -954,7 +999,7 @@ mod tests {
                 "test_namespace.test.test_output".to_string(),
             )]),
             content_source: internal_api::ExtractionPolicyContentSource::ExtractionPolicyId(
-                extraction_policy_1.name,
+                extraction_policy_1.name.clone(),
             ),
             ..Default::default()
         };
@@ -972,7 +1017,7 @@ mod tests {
             created_at: 0,
             storage_url: "test_storage_url".to_string(),
             labels: HashMap::new(),
-            source: extraction_policy_1.id,
+            source: vec![extraction_policy_1.name],
             size_bytes: 100,
             hash: "".into(),
             ..Default::default()
@@ -1010,7 +1055,7 @@ mod tests {
             created_at: 0,
             storage_url: "test_storage_url".to_string(),
             labels: HashMap::new(),
-            source: "ingestion".to_string(),
+            source: vec!["ingestion".to_string()],
             size_bytes: 100,
             hash: "".into(),
             ..Default::default()
@@ -1062,7 +1107,7 @@ mod tests {
             created_at: 0,
             storage_url: "test_storage_url".to_string(),
             labels: HashMap::new(),
-            source: extraction_policy_1.id,
+            source: vec![extraction_policy_1.name.clone()],
             size_bytes: 100,
             hash: "".into(),
             ..Default::default()
@@ -1176,7 +1221,7 @@ mod tests {
                 "test_namespace.test.test_output".to_string(),
             )]),
             content_source: internal_api::ExtractionPolicyContentSource::ExtractionPolicyId(
-                extraction_policy_1.name,
+                extraction_policy_1.name.clone(),
             ),
             ..Default::default()
         };
@@ -1194,7 +1239,7 @@ mod tests {
             created_at: 0,
             storage_url: "test_storage_url".to_string(),
             labels: HashMap::new(),
-            source: "ingestion".to_string(),
+            source: vec!["ingestion".to_string()],
             size_bytes: 100,
             hash: "123".into(),
             ..Default::default()
@@ -1211,7 +1256,7 @@ mod tests {
             created_at: 0,
             storage_url: "test_storage_url".to_string(),
             labels: HashMap::new(),
-            source: extraction_policy_1.id.clone(),
+            source: vec![extraction_policy_1.name.clone()],
             size_bytes: 100,
             hash: "456".into(),
             ..Default::default()
@@ -1225,7 +1270,7 @@ mod tests {
             created_at: 0,
             storage_url: "test_storage_url".to_string(),
             labels: HashMap::new(),
-            source: extraction_policy_2.id.clone(),
+            source: vec![extraction_policy_2.name],
             size_bytes: 100,
             hash: "789".into(),
             ..Default::default()
@@ -1242,7 +1287,7 @@ mod tests {
             created_at: 0,
             storage_url: "test_storage_url".to_string(),
             labels: HashMap::new(),
-            source: extraction_policy_1.id.clone(),
+            source: vec![extraction_policy_1.name],
             size_bytes: 100,
             hash: "987".into(),
             ..Default::default()
@@ -1306,7 +1351,7 @@ mod tests {
                 "test_namespace.test.test_output".to_string(),
             )]),
             content_source: internal_api::ExtractionPolicyContentSource::ExtractionPolicyId(
-                extraction_policy_1.name,
+                extraction_policy_1.name.clone(),
             ),
             ..Default::default()
         };
@@ -1324,7 +1369,7 @@ mod tests {
             created_at: 0,
             storage_url: "test_storage_url".to_string(),
             labels: HashMap::new(),
-            source: "ingestion".to_string(),
+            source: vec!["ingestion".to_string()],
             size_bytes: 100,
             hash: "".into(),
             ..Default::default()
@@ -1342,7 +1387,7 @@ mod tests {
             created_at: 0,
             storage_url: "test_storage_url".to_string(),
             labels: HashMap::new(),
-            source: extraction_policy_1.id.clone(),
+            source: vec![extraction_policy_1.name.clone()],
             size_bytes: 100,
             hash: "".into(),
             ..Default::default()
@@ -1356,7 +1401,7 @@ mod tests {
             created_at: 0,
             storage_url: "test_storage_url".to_string(),
             labels: HashMap::new(),
-            source: extraction_policy_2.id.clone(),
+            source: vec![extraction_policy_2.name],
             size_bytes: 100,
             hash: "".into(),
             ..Default::default()
@@ -1374,7 +1419,7 @@ mod tests {
             created_at: 0,
             storage_url: "test_storage_url".to_string(),
             labels: HashMap::new(),
-            source: extraction_policy_1.id.clone(),
+            source: vec![extraction_policy_1.name.clone()],
             size_bytes: 100,
             hash: "".into(),
             ..Default::default()
@@ -1393,7 +1438,7 @@ mod tests {
             created_at: 0,
             storage_url: "test_storage_url".to_string(),
             labels: HashMap::new(),
-            source: "ingestion".to_string(),
+            source: vec!["ingestion".to_string()],
             size_bytes: 100,
             hash: "".into(),
             ..Default::default()
@@ -1411,7 +1456,7 @@ mod tests {
             created_at: 0,
             storage_url: "test_storage_url".to_string(),
             labels: HashMap::new(),
-            source: extraction_policy_1.id.clone(),
+            source: vec![extraction_policy_1.name.clone()],
             size_bytes: 100,
             hash: "".into(),
             ..Default::default()
@@ -1492,7 +1537,7 @@ mod tests {
             created_at: 0,
             storage_url: "test_storage_url".to_string(),
             labels: HashMap::new(),
-            source: "ingestion".to_string(),
+            source: vec!["ingestion".to_string()],
             size_bytes: 100,
             hash: "".into(),
             ..Default::default()
@@ -1510,7 +1555,7 @@ mod tests {
             created_at: 0,
             storage_url: "test_storage_url".to_string(),
             labels: HashMap::new(),
-            source: extraction_policy_1.id.clone(),
+            source: vec![extraction_policy_1.name.clone()],
             size_bytes: 100,
             hash: "".into(),
             ..Default::default()
@@ -1524,7 +1569,7 @@ mod tests {
             created_at: 0,
             storage_url: "test_storage_url".to_string(),
             labels: HashMap::new(),
-            source: extraction_policy_1.id.clone(),
+            source: vec![extraction_policy_1.name.clone()],
             size_bytes: 100,
             hash: "".into(),
             ..Default::default()
@@ -1533,18 +1578,11 @@ mod tests {
             .create_content_metadata(vec![child_content_1.clone(), child_content_2.clone()])
             .await?;
 
-        let parent_content_internal: indexify_internal_api::ContentMetadata =
-            indexify_internal_api::ContentMetadata::from_coordinator_metadata(
-                parent_content.clone(),
-                vec![],
-            );
+        let parent_content_internal =
+            coordinator.external_content_metadata_to_internal(vec![parent_content.clone()])?;
+        let parent_content_internal = parent_content_internal.first().unwrap();
 
         //  before tombstone
-        let content_matching_policy = coordinator
-            .shared_state
-            .match_contents_for_extraction_policy(&extraction_policy_1.id)
-            .await?;
-        assert_eq!(content_matching_policy.len(), 1);
         let policies_matching_content = coordinator
             .shared_state
             .match_extraction_policies_for_content(&parent_content_internal.id)
@@ -1557,11 +1595,6 @@ mod tests {
             .await?;
 
         //  after tombstone
-        let content_matching_policy = coordinator
-            .shared_state
-            .match_contents_for_extraction_policy(&extraction_policy_1.id)
-            .await?;
-        assert_eq!(content_matching_policy.len(), 0);
         let policies_matching_content = coordinator
             .shared_state
             .match_extraction_policies_for_content(&parent_content_internal.id)
@@ -1619,7 +1652,7 @@ mod tests {
                 "test_namespace.test.test_output".to_string(),
             )]),
             content_source: internal_api::ExtractionPolicyContentSource::ExtractionPolicyId(
-                extraction_policy_1.name,
+                extraction_policy_1.name.clone(),
             ),
             ..Default::default()
         };
@@ -1638,7 +1671,7 @@ mod tests {
             created_at: 0,
             storage_url: "test_storage_url".to_string(),
             labels: HashMap::new(),
-            source: "ingestion".to_string(),
+            source: vec!["ingestion".to_string()],
             size_bytes: 100,
             hash: "".into(),
             ..Default::default()
@@ -1657,7 +1690,7 @@ mod tests {
             created_at: 0,
             storage_url: "test_storage_url".to_string(),
             labels: HashMap::new(),
-            source: extraction_policy_1.id.clone(),
+            source: vec![extraction_policy_1.name.clone()],
             size_bytes: 100,
             hash: "".into(),
             ..Default::default()
@@ -1671,7 +1704,7 @@ mod tests {
             created_at: 0,
             storage_url: "test_storage_url".to_string(),
             labels: HashMap::new(),
-            source: extraction_policy_2.id.clone(),
+            source: vec![extraction_policy_2.name],
             size_bytes: 100,
             hash: "".into(),
             ..Default::default()
@@ -1690,7 +1723,7 @@ mod tests {
             created_at: 0,
             storage_url: "test_storage_url".to_string(),
             labels: HashMap::new(),
-            source: extraction_policy_1.id.clone(),
+            source: vec![extraction_policy_1.name],
             size_bytes: 100,
             hash: "".into(),
             ..Default::default()
@@ -1788,7 +1821,7 @@ mod tests {
                 "test_namespace.test.test_output".to_string(),
             )]),
             content_source: internal_api::ExtractionPolicyContentSource::ExtractionPolicyId(
-                extraction_policy_1.name,
+                extraction_policy_1.name.clone(),
             ),
             ..Default::default()
         };
@@ -1807,7 +1840,7 @@ mod tests {
             created_at: 0,
             storage_url: "test_storage_url".to_string(),
             labels: HashMap::new(),
-            source: "ingestion".to_string(),
+            source: vec!["ingestion".to_string()],
             size_bytes: 100,
             hash: "test_parent_id".into(),
             ..Default::default()
@@ -1835,7 +1868,7 @@ mod tests {
             created_at: 0,
             storage_url: "test_storage_url".to_string(),
             labels: HashMap::new(),
-            source: extraction_policy_1.id.clone(),
+            source: vec![extraction_policy_1.name.clone()],
             size_bytes: 100,
             hash: "test_child_id_1".into(),
             ..Default::default()
@@ -1849,7 +1882,7 @@ mod tests {
             created_at: 0,
             storage_url: "test_storage_url".to_string(),
             labels: HashMap::new(),
-            source: extraction_policy_1.id.clone(),
+            source: vec![extraction_policy_1.name.clone()],
             size_bytes: 100,
             hash: "test_child_id_2".into(),
             ..Default::default()
@@ -1878,7 +1911,7 @@ mod tests {
             created_at: 0,
             storage_url: "test_storage_url".to_string(),
             labels: HashMap::new(),
-            source: "ingestion".to_string(),
+            source: vec!["ingestion".to_string()],
             size_bytes: 100,
             hash: "test_parent_id_new_hash".into(),
             ..Default::default()
@@ -1902,7 +1935,7 @@ mod tests {
             created_at: 0,
             storage_url: "test_storage_url".to_string(),
             labels: HashMap::new(),
-            source: extraction_policy_1.id.clone(),
+            source: vec![extraction_policy_1.name.clone()],
             size_bytes: 100,
             hash: "test_child_id_1".into(),
             ..Default::default()
@@ -1916,7 +1949,8 @@ mod tests {
             created_at: 0,
             storage_url: "test_storage_url".to_string(),
             labels: HashMap::new(),
-            source: extraction_policy_1.id.clone(),
+            source: vec![extraction_policy_1.name.clone()],
+
             size_bytes: 100,
             hash: "test_child_id_2_new".into(),
             ..Default::default()
@@ -1930,7 +1964,7 @@ mod tests {
             created_at: 0,
             storage_url: "test_storage_url".to_string(),
             labels: HashMap::new(),
-            source: extraction_policy_1.id.clone(),
+            source: vec![extraction_policy_1.name.clone()],
             size_bytes: 100,
             hash: "test_child_id_3".into(),
             ..Default::default()
@@ -2066,7 +2100,7 @@ mod tests {
             file_name: "name".into(),
             labels: content_labels.into_iter().collect(),
             mime: "*/*".into(),
-            source: "source".into(),
+            source: vec!["source".to_string()],
             ..Default::default()
         };
         let mut content_batch = vec![content_metadata];
@@ -2078,7 +2112,7 @@ mod tests {
             file_name: "name".into(),
             labels: content_labels.into_iter().collect(),
             mime: "*/*".into(),
-            source: "source".into(),
+            source: vec!["source".to_string()],
             ..Default::default()
         };
         content_batch.push(content_metadata);

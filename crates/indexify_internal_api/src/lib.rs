@@ -532,6 +532,19 @@ pub enum ExtractionPolicyContentSource {
     ExtractionPolicyId(ExtractionPolicyId),
 }
 
+impl From<&ExtractionPolicyContentSource> for ContentMetadataSource {
+    fn from(value: &ExtractionPolicyContentSource) -> Self {
+        match value {
+            ExtractionPolicyContentSource::ExtractionGraphId(id) => {
+                ContentMetadataSource::ExtractionGraphId(id.to_string())
+            }
+            ExtractionPolicyContentSource::ExtractionPolicyId(id) => {
+                ContentMetadataSource::ExtractionPolicyId(id.to_string())
+            }
+        }
+    }
+}
+
 impl Default for ExtractionPolicyContentSource {
     fn default() -> Self {
         ExtractionPolicyContentSource::ExtractionPolicyId(ExtractionPolicyId::default())
@@ -763,7 +776,32 @@ impl Default for ContentMetadataId {
     }
 }
 
-pub type NamespaceName = String;
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum ContentMetadataSource {
+    ExtractionGraphId(ExtractionGraphId),
+    ExtractionPolicyId(ExtractionPolicyId),
+}
+
+impl Default for ContentMetadataSource {
+    fn default() -> Self {
+        ContentMetadataSource::ExtractionPolicyId(ExtractionPolicyId::default())
+    }
+}
+
+impl From<ContentMetadataSource> for String {
+    fn from(source: ContentMetadataSource) -> Self {
+        String::from(&source)
+    }
+}
+
+impl From<&ContentMetadataSource> for String {
+    fn from(value: &ContentMetadataSource) -> Self {
+        match value {
+            ContentMetadataSource::ExtractionGraphId(id) => id.clone(),
+            ContentMetadataSource::ExtractionPolicyId(id) => id.clone(),
+        }
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
 pub struct ContentMetadata {
@@ -776,11 +814,11 @@ pub struct ContentMetadata {
     pub labels: HashMap<String, String>,
     pub storage_url: String,
     pub created_at: i64,
-    pub source: String,
+    pub source: Vec<ContentMetadataSource>,
     pub size_bytes: u64,
     pub tombstoned: bool,
     pub hash: String,
-    pub extraction_policy_ids: HashMap<String, u64>, //  map of completion time for each extraction policy id
+    pub extraction_policy_ids: HashMap<ExtractionPolicyId, u64>, //  map of completion time for each extraction policy id
     pub extraction_graph_ids: Vec<ExtractionGraphId>,
 }
 
@@ -788,6 +826,7 @@ impl ContentMetadata {
     pub fn from_coordinator_metadata(
         value: indexify_coordinator::ContentMetadata,
         extraction_graph_ids: Vec<ExtractionGraphId>,
+        source: Vec<ContentMetadataSource>,
     ) -> Self {
         Self {
             id: ContentMetadataId {
@@ -805,7 +844,7 @@ impl ContentMetadata {
             storage_url: value.storage_url,
             created_at: value.created_at,
             namespace: value.namespace,
-            source: value.source,
+            source,
             size_bytes: value.size_bytes,
             tombstoned: false,
             hash: value.hash,
@@ -828,7 +867,7 @@ impl ContentMetadata {
             storage_url: value.storage_url,
             created_at: value.created_at,
             namespace: value.namespace,
-            source: value.source,
+            source: value.source.iter().map(|v| String::from(v)).collect(),
             size_bytes: value.size_bytes,
             hash: value.hash,
             extraction_policy_ids: value.extraction_policy_ids,
@@ -857,7 +896,9 @@ impl Default for ContentMetadata {
             },
             storage_url: "http://example.com/test_url".to_string(),
             created_at: 1234567890, // example timestamp
-            source: "test_source".to_string(),
+            source: vec![ContentMetadataSource::ExtractionPolicyId(
+                "test_source".to_string(),
+            )],
             size_bytes: 1234567890,
             extraction_policy_ids: HashMap::new(),
             tombstoned: false,
@@ -914,6 +955,7 @@ impl TaskResult {
     }
 }
 
+pub type NamespaceName = String;
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Namespace {
     pub name: NamespaceName,
@@ -931,19 +973,6 @@ impl Namespace {
         }
     }
 }
-
-// impl From<Namespace> for indexify_coordinator::Namespace {
-//     fn from(value: Namespace) -> Self {
-//         Self {
-//             name: value.name,
-//             policies: value
-//                 .extraction_policies
-//                 .into_iter()
-//                 .map(|b| b.into())
-//                 .collect(),
-//         }
-//     }
-// }
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub enum ChangeType {
