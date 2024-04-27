@@ -13,7 +13,7 @@ pub fn list_content_filter<'a>(
     content_vec
         .into_iter()
         .filter(move |c| source.is_empty() || c.source.contains(&source.to_string()))
-        .filter(move |c| parent_id.is_empty() || c.parent_id.to_string() == parent_id)
+        .filter(move |c| parent_id.is_empty() || c.parent_id == parent_id)
         // c.labels HashMap<String, String> must exactly match labels_eq { ("key", "value") }
         // and not have any other labels
         .filter(move |c| {

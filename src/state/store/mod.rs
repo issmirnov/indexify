@@ -12,13 +12,29 @@ use anyhow::Result;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use flate2::bufread::ZlibDecoder;
 use indexify_internal_api::{
-    ContentMetadata, ExecutorMetadata, NamespaceName, StateChange, StructuredDataSchema,
+    ContentMetadata,
+    ExecutorMetadata,
+    NamespaceName,
+    StateChange,
+    StructuredDataSchema,
 };
 use openraft::{
     storage::{LogFlushed, LogState, RaftLogStorage, RaftStateMachine, Snapshot},
-    AnyError, BasicNode, Entry, EntryPayload, ErrorSubject, ErrorVerb, LogId, OptionalSend,
-    RaftLogReader, RaftSnapshotBuilder, SnapshotMeta, StorageError, StorageIOError,
-    StoredMembership, Vote,
+    AnyError,
+    BasicNode,
+    Entry,
+    EntryPayload,
+    ErrorSubject,
+    ErrorVerb,
+    LogId,
+    OptionalSend,
+    RaftLogReader,
+    RaftSnapshotBuilder,
+    SnapshotMeta,
+    StorageError,
+    StorageIOError,
+    StoredMembership,
+    Vote,
 };
 use rocksdb::{ColumnFamily, ColumnFamilyDescriptor, Direction, OptimisticTransactionDB, Options};
 use serde::{de::DeserializeOwned, Deserialize};
