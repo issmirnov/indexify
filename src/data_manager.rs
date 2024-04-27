@@ -689,7 +689,7 @@ impl DataManager {
                 }
                 api::FeatureType::Metadata => {
                     assert_eq!(content_meta.source.len(), 1); // content meta source should be singular at this point
-                    let source = content_meta.source.first().unwrap();
+                    let source = content_meta.source.first().unwrap(); //EGTODO: Check this again. Make sure source is correct
                     let extracted_attributes = ExtractedMetadata::new(
                         &content_meta.id,
                         &content_meta.parent_id,

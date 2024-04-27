@@ -161,7 +161,7 @@ impl ContentStateWriting {
                     size_bytes: frame_state.file_size,
                     storage_url: frame_state.writer.url.clone(),
                     labels,
-                    source: vec![self.ingest_metadata.extraction_policy.clone()],
+                    source: vec![self.ingest_metadata.extraction_policy.clone()], //EGTODO: If this is extraction policy id, how do I determine not to convert this in coordinator?
                     created_at: frame_state.created_at,
                     hash: content_hash,
                     extraction_policy_ids: HashMap::new(),
