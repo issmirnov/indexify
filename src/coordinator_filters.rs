@@ -41,7 +41,7 @@ mod test {
         let content = vec![
             indexify_coordinator::ContentMetadata {
                 id: "1".to_string(),
-                source: vec!["source".to_string()],
+                source: vec!["source1".to_string()],
                 parent_id: "parent1".to_string(),
                 labels: {
                     let mut labels = HashMap::new();
@@ -97,14 +97,14 @@ mod test {
 
         // parent_id and source filter
         let filtered_content =
-            list_content_filter(content.clone(), "source1", "parent2::v1", &no_labels_filter)
+            list_content_filter(content.clone(), "source1", "parent2", &no_labels_filter)
                 .collect::<Vec<_>>();
         assert_eq!(filtered_content.len(), 1);
         assert_eq!(filtered_content[0].id, "3");
 
         // parent_id filter
         let filtered_content =
-            list_content_filter(content.clone(), "", "parent2::v1", &no_labels_filter)
+            list_content_filter(content.clone(), "", "parent2", &no_labels_filter)
                 .collect::<Vec<_>>();
         assert_eq!(filtered_content.len(), 2);
         assert_eq!(filtered_content[0].id, "2");
