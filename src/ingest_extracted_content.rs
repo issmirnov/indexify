@@ -141,6 +141,7 @@ impl ContentStateWriting {
     ) -> Result<String> {
         let mut labels = self.content_metadata().labels.clone();
         let root_content_id = self.content_metadata().root_content_id.clone();
+        let parent_id = self.content_metadata().id.clone();
         match &mut self.frame_state {
             FrameState::New => Err(anyhow!(
                 "received finish content without any content frames"
@@ -154,14 +155,14 @@ impl ContentStateWriting {
                 let content_metadata = indexify_coordinator::ContentMetadata {
                     id: id.clone(),
                     file_name: frame_state.file_name.clone(),
-                    parent_id: self.ingest_metadata.parent_content_id.clone(),
+                    parent_id,
                     root_content_id,
-                    namespace: self.ingest_metadata.namespace.clone(),
+                    namespace: self.task.namespace.clone(),
                     mime: payload.content_type,
                     size_bytes: frame_state.file_size,
                     storage_url: frame_state.writer.url.clone(),
                     labels,
-                    source: vec![self.ingest_metadata.extraction_policy.clone()], //EGTODO: If this is extraction policy id, how do I determine not to convert this in coordinator?
+                    source: self.task.extraction_policy_id.clone(),
                     created_at: frame_state.created_at,
                     hash: content_hash,
                     extraction_policy_ids: HashMap::new(),
@@ -171,8 +172,9 @@ impl ContentStateWriting {
                     .data_manager
                     .create_content_and_write_features(
                         &content_metadata,
-                        &self.ingest_metadata,
+                        &self.task.extractor,
                         payload.features,
+                        &self.task.output_index_mapping,
                     )
                     .await?;
                 state.metrics.node_content_extracted.add(1, &[]);
@@ -194,12 +196,11 @@ impl ContentStateWriting {
         state
             .data_manager
             .write_existing_content_features(
-                &self.ingest_metadata.extractor,
-                &self.ingest_metadata.extraction_policy,
+                &self.task.extractor,
                 self.content_metadata(),
                 payload.features,
-                &self.ingest_metadata.output_to_index_table_mapping,
-                &self.ingest_metadata.index_tables,
+                &self.task.output_index_mapping,
+                &self.task.index_tables,
             )
             .await
     }
@@ -224,19 +225,14 @@ impl IngestExtractedContentState {
     }
 
     async fn begin(&mut self, payload: BeginExtractedContentIngest) -> Result<()> {
-        info!(
-            "beginning extraction ingest for task: {} index_tables: {}",
-            payload.task_id,
-            payload.index_tables.join(",")
-        );
+        info!("beginning extraction ingest for task: {}", payload.task_id);
         let task = self
             .state
             .coordinator_client
             .get_task(&payload.task_id)
             .await?
             .ok_or(anyhow!("task not found"))?;
-        self.content_state =
-            ContentState::Writing(ContentStateWriting::new(payload.clone(), task)?);
+        self.content_state = ContentState::Writing(ContentStateWriting::new(payload, task)?);
         Ok(())
     }
 
@@ -397,6 +393,19 @@ mod tests {
         config
     }
 
+    fn make_test_task(task_id: &str, content_metadata: &ContentMetadata) -> Task {
+        let mut task = Task::new(task_id, &content_metadata);
+        task.output_index_table_mapping = vec![
+            ("name1".to_string(), "test_index1".to_string()),
+            ("name2".to_string(), "test_index2".to_string()),
+        ]
+        .into_iter()
+        .collect();
+        task.extractor = "test".to_string();
+        task.index_tables = vec!["test_index1".to_string()];
+        task
+    }
+
     struct TestCoordinator {
         coordinator: Arc<Coordinator>,
         handle: JoinHandle<()>,
@@ -459,7 +468,7 @@ mod tests {
                 .await
                 .unwrap();
             test_coordinator
-                .create_task(Task::new("test", &content_metadata))
+                .create_task(make_test_task("test", &content_metadata))
                 .await
                 .unwrap();
             test_coordinator
@@ -548,14 +557,8 @@ mod tests {
         let mut ingest_state = IngestExtractedContentState::new(state);
         let payload = BeginExtractedContentIngest {
             task_id: "test".to_string(),
-            namespace: "test".to_string(),
-            parent_content_id: "".to_string(),
-            extraction_policy: "test".to_string(),
-            extractor: "test".to_string(),
-            output_to_index_table_mapping: HashMap::new(),
             executor_id: "test".to_string(),
             task_outcome: TaskOutcome::Success,
-            index_tables: vec!["test".to_string()],
         };
         ingest_state.begin(payload.clone()).await.unwrap();
         let new_payload = if let ContentState::Writing(s) = &ingest_state.content_state {
@@ -564,14 +567,6 @@ mod tests {
             panic!("content_state should be Writing");
         };
         assert_eq!(new_payload.task_id, payload.task_id);
-        assert_eq!(new_payload.namespace, payload.namespace);
-        assert_eq!(new_payload.parent_content_id, payload.parent_content_id);
-        assert_eq!(new_payload.extraction_policy, payload.extraction_policy);
-        assert_eq!(new_payload.extractor, payload.extractor);
-        assert_eq!(
-            new_payload.output_to_index_table_mapping,
-            payload.output_to_index_table_mapping
-        );
         assert_eq!(new_payload.executor_id, payload.executor_id);
         assert_eq!(new_payload.task_outcome, payload.task_outcome);
 
@@ -638,12 +633,6 @@ mod tests {
         let coordinator = TestCoordinator::new().await;
 
         let mut ingest_state = IngestExtractedContentState::new(state.clone());
-        let output_mappings: HashMap<String, String> = vec![
-            ("name1".to_string(), "test_index1".to_string()),
-            ("name2".to_string(), "test_index2".to_string()),
-        ]
-        .into_iter()
-        .collect();
 
         let schema = indexify_internal_api::EmbeddingSchema {
             dim: 3,
@@ -667,14 +656,8 @@ mod tests {
 
         let payload = BeginExtractedContentIngest {
             task_id: "test".to_string(),
-            namespace: "test".to_string(),
-            parent_content_id: "".to_string(),
-            extraction_policy: "test".to_string(),
-            extractor: "test".to_string(),
-            output_to_index_table_mapping: output_mappings.clone(),
             executor_id: "test".to_string(),
             task_outcome: TaskOutcome::Success,
-            index_tables: vec!["test_index1".to_string()],
         };
 
         ingest_state.begin(payload.clone()).await.unwrap();
@@ -723,21 +706,15 @@ mod tests {
             .await
             .unwrap();
         coordinator
-            .create_task(Task::new("test_1", content_metadata.first().unwrap()))
+            .create_task(make_test_task("test_1", content_metadata.first().unwrap()))
             .await
             .unwrap();
         assert_eq!(content_metadata.first().unwrap().root_content_id, "1");
 
         let payload = BeginExtractedContentIngest {
             task_id: "test_1".to_string(),
-            namespace: "test".to_string(),
-            parent_content_id: "".to_string(),
-            extraction_policy: "test".to_string(),
-            extractor: "test".to_string(),
-            output_to_index_table_mapping: output_mappings,
             executor_id: "test".to_string(),
             task_outcome: TaskOutcome::Success,
-            index_tables: vec!["test_index1".to_string()],
         };
 
         let mut ingest_state = IngestExtractedContentState::new(state.clone());
@@ -782,12 +759,6 @@ mod tests {
         let coordinator = TestCoordinator::new().await;
 
         let mut ingest_state = IngestExtractedContentState::new(state.clone());
-        let output_mappings: HashMap<String, String> = vec![
-            ("name1".to_string(), "test_index1".to_string()),
-            ("name2".to_string(), "test_index2".to_string()),
-        ]
-        .into_iter()
-        .collect();
 
         let schema = indexify_internal_api::EmbeddingSchema {
             dim: 3,
@@ -811,14 +782,8 @@ mod tests {
 
         let payload = BeginExtractedContentIngest {
             task_id: "test".to_string(),
-            namespace: "test".to_string(),
-            parent_content_id: "".to_string(),
-            extraction_policy: "test".to_string(),
-            extractor: "test".to_string(),
-            output_to_index_table_mapping: output_mappings.clone(),
             executor_id: "test".to_string(),
             task_outcome: TaskOutcome::Success,
-            index_tables: vec!["test_index1".to_string()],
         };
 
         ingest_state.begin(payload.clone()).await.unwrap();
@@ -849,20 +814,14 @@ mod tests {
             .await
             .unwrap();
         coordinator
-            .create_task(Task::new("test_1", content_metadata.first().unwrap()))
+            .create_task(make_test_task("test_1", content_metadata.first().unwrap()))
             .await
             .unwrap();
 
         let payload = BeginExtractedContentIngest {
             task_id: "test_1".to_string(),
-            namespace: "test".to_string(),
-            parent_content_id: "".to_string(),
-            extraction_policy: "test".to_string(),
-            extractor: "test".to_string(),
-            output_to_index_table_mapping: output_mappings,
             executor_id: "test".to_string(),
             task_outcome: TaskOutcome::Success,
-            index_tables: vec!["test_index1".to_string()],
         };
 
         let mut ingest_state = IngestExtractedContentState::new(state.clone());
