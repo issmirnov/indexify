@@ -14,66 +14,26 @@ use futures::StreamExt;
 use hyper::StatusCode;
 use indexify_internal_api as internal_api;
 use indexify_proto::indexify_coordinator::{
-    self,
-    coordinator_service_server::CoordinatorService,
-    CoordinatorCommand,
-    CreateContentRequest,
-    CreateContentResponse,
-    CreateExtractionGraphRequest,
-    CreateExtractionGraphResponse,
-    CreateGcTasksRequest,
-    CreateGcTasksResponse,
-    GcTask,
-    GcTaskAcknowledgement,
-    GetAllSchemaRequest,
-    GetAllSchemaResponse,
-    GetAllTaskAssignmentRequest,
-    GetContentMetadataRequest,
-    GetContentTreeMetadataRequest,
-    GetExtractionPolicyRequest,
-    GetExtractionPolicyResponse,
-    GetExtractorCoordinatesRequest,
-    GetIndexRequest,
-    GetIndexResponse,
-    GetRaftMetricsSnapshotRequest,
-    GetSchemaRequest,
-    GetSchemaResponse,
-    GetTaskRequest,
-    GetTaskResponse,
-    HeartbeatRequest,
-    HeartbeatResponse,
-    ListContentRequest,
-    ListContentResponse,
-    ListExtractionPoliciesRequest,
-    ListExtractionPoliciesResponse,
-    ListExtractorsRequest,
-    ListExtractorsResponse,
-    ListIndexesRequest,
-    ListIndexesResponse,
-    ListStateChangesRequest,
-    ListTasksRequest,
-    ListTasksResponse,
-    RaftMetricsSnapshotResponse,
-    RegisterExecutorRequest,
-    RegisterExecutorResponse,
-    RegisterIngestionServerRequest,
-    RegisterIngestionServerResponse,
-    RemoveIngestionServerRequest,
-    RemoveIngestionServerResponse,
-    TaskAssignments,
-    TombstoneContentRequest,
-    TombstoneContentResponse,
-    Uint64List,
-    UpdateIndexesStateRequest,
-    UpdateIndexesStateResponse,
-    UpdateTaskRequest,
-    UpdateTaskResponse,
+    self, coordinator_service_server::CoordinatorService, CoordinatorCommand, CreateContentRequest,
+    CreateContentResponse, CreateExtractionGraphRequest, CreateExtractionGraphResponse,
+    CreateGcTasksRequest, CreateGcTasksResponse, GcTask, GcTaskAcknowledgement,
+    GetAllSchemaRequest, GetAllSchemaResponse, GetAllTaskAssignmentRequest,
+    GetContentMetadataRequest, GetContentTreeMetadataRequest, GetExtractionPolicyRequest,
+    GetExtractionPolicyResponse, GetExtractorCoordinatesRequest, GetIndexRequest, GetIndexResponse,
+    GetRaftMetricsSnapshotRequest, GetSchemaRequest, GetSchemaResponse, GetTaskRequest,
+    GetTaskResponse, HeartbeatRequest, HeartbeatResponse, ListContentRequest, ListContentResponse,
+    ListExtractionPoliciesRequest, ListExtractionPoliciesResponse, ListExtractorsRequest,
+    ListExtractorsResponse, ListIndexesRequest, ListIndexesResponse, ListStateChangesRequest,
+    ListTasksRequest, ListTasksResponse, RaftMetricsSnapshotResponse, RegisterExecutorRequest,
+    RegisterExecutorResponse, RegisterIngestionServerRequest, RegisterIngestionServerResponse,
+    RemoveIngestionServerRequest, RemoveIngestionServerResponse, TaskAssignments,
+    TombstoneContentRequest, TombstoneContentResponse, Uint64List, UpdateIndexesStateRequest,
+    UpdateIndexesStateResponse, UpdateTaskRequest, UpdateTaskResponse,
 };
 use internal_api::{ExtractionGraph, ExtractionGraphBuilder, ExtractionPolicyBuilder, StateChange};
 use prometheus::Encoder;
 use tokio::{
-    select,
-    signal,
+    select, signal,
     sync::{
         mpsc,
         watch::{self, Receiver, Sender},
@@ -85,12 +45,8 @@ use tonic::{Request, Response, Status, Streaming};
 use tracing::{error, info};
 
 use crate::{
-    api::IndexifyAPIError,
-    coordinator::Coordinator,
-    coordinator_client::CoordinatorClient,
-    garbage_collector::GarbageCollector,
-    server_config::ServerConfig,
-    state,
+    api::IndexifyAPIError, coordinator::Coordinator, coordinator_client::CoordinatorClient,
+    garbage_collector::GarbageCollector, server_config::ServerConfig, state,
     tonic_streamer::DropReceiver,
 };
 
@@ -155,37 +111,22 @@ impl CoordinatorServiceServer {
             let input_params = serde_json::from_str(&policy_request.input_params)
                 .map_err(|e| anyhow!(format!("unable to parse input_params: {}", e)))?;
             let extractor = self.coordinator.get_extractor(&policy_request.extractor)?;
-            let policy = {
+            let content_source = {
                 if policy_name == root_policy_name {
-                    ExtractionPolicyBuilder::default()
-                        .namespace(policy_request.namespace)
-                        .name(policy_request.name)
-                        .extractor(policy_request.extractor)
-                        .filters(policy_request.filters)
-                        .input_params(input_params)
-                        .content_source(
-                            internal_api::ExtractionPolicyContentSource::ExtractionGraphId(
-                                parent_id,
-                            ),
-                        )
-                        .build(&graph_id, &extraction_graph.name, extractor.clone())
-                        .map_err(|e| anyhow!(e))?
+                    internal_api::ExtractionPolicyContentSource::ExtractionGraphId(parent_id)
                 } else {
-                    ExtractionPolicyBuilder::default()
-                        .namespace(policy_request.namespace)
-                        .name(policy_request.name)
-                        .extractor(policy_request.extractor)
-                        .filters(policy_request.filters)
-                        .input_params(input_params)
-                        .content_source(
-                            internal_api::ExtractionPolicyContentSource::ExtractionPolicyId(
-                                parent_id,
-                            ),
-                        )
-                        .build(&graph_id, &extraction_graph.name, extractor.clone())
-                        .map_err(|e| anyhow!(e))?
+                    internal_api::ExtractionPolicyContentSource::ExtractionPolicyId(parent_id)
                 }
             };
+            let policy = ExtractionPolicyBuilder::default()
+                .namespace(policy_request.namespace)
+                .name(policy_request.name)
+                .extractor(policy_request.extractor)
+                .filters(policy_request.filters)
+                .input_params(input_params)
+                .content_source(content_source)
+                .build(&graph_id, &extraction_graph.name, extractor.clone())
+                .map_err(|e| anyhow!(e))?;
             extraction_policies.push(policy.clone());
             extractors.push(extractor.clone());
             if let Some(children) = parent_child_policy_mapping.get(&policy_name) {
