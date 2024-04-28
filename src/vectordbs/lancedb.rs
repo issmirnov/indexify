@@ -100,8 +100,6 @@ async fn update_schema_with_missing_fields(
         }
     }
     if !new_fields.is_empty() {
-        println!("updating schema with new fields: {:?}", new_fields);
-
         let new_schema = Arc::new(Schema::new(new_fields.clone()));
         let cloned_schema = new_schema.clone();
 

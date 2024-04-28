@@ -14,26 +14,66 @@ use futures::StreamExt;
 use hyper::StatusCode;
 use indexify_internal_api as internal_api;
 use indexify_proto::indexify_coordinator::{
-    self, coordinator_service_server::CoordinatorService, CoordinatorCommand, CreateContentRequest,
-    CreateContentResponse, CreateExtractionGraphRequest, CreateExtractionGraphResponse,
-    CreateGcTasksRequest, CreateGcTasksResponse, GcTask, GcTaskAcknowledgement,
-    GetAllSchemaRequest, GetAllSchemaResponse, GetAllTaskAssignmentRequest,
-    GetContentMetadataRequest, GetContentTreeMetadataRequest, GetExtractionPolicyRequest,
-    GetExtractionPolicyResponse, GetExtractorCoordinatesRequest, GetIndexRequest, GetIndexResponse,
-    GetRaftMetricsSnapshotRequest, GetSchemaRequest, GetSchemaResponse, GetTaskRequest,
-    GetTaskResponse, HeartbeatRequest, HeartbeatResponse, ListContentRequest, ListContentResponse,
-    ListExtractionPoliciesRequest, ListExtractionPoliciesResponse, ListExtractorsRequest,
-    ListExtractorsResponse, ListIndexesRequest, ListIndexesResponse, ListStateChangesRequest,
-    ListTasksRequest, ListTasksResponse, RaftMetricsSnapshotResponse, RegisterExecutorRequest,
-    RegisterExecutorResponse, RegisterIngestionServerRequest, RegisterIngestionServerResponse,
-    RemoveIngestionServerRequest, RemoveIngestionServerResponse, TaskAssignments,
-    TombstoneContentRequest, TombstoneContentResponse, Uint64List, UpdateIndexesStateRequest,
-    UpdateIndexesStateResponse, UpdateTaskRequest, UpdateTaskResponse,
+    self,
+    coordinator_service_server::CoordinatorService,
+    CoordinatorCommand,
+    CreateContentRequest,
+    CreateContentResponse,
+    CreateExtractionGraphRequest,
+    CreateExtractionGraphResponse,
+    CreateGcTasksRequest,
+    CreateGcTasksResponse,
+    GcTask,
+    GcTaskAcknowledgement,
+    GetAllSchemaRequest,
+    GetAllSchemaResponse,
+    GetAllTaskAssignmentRequest,
+    GetContentMetadataRequest,
+    GetContentTreeMetadataRequest,
+    GetExtractionPolicyRequest,
+    GetExtractionPolicyResponse,
+    GetExtractorCoordinatesRequest,
+    GetIndexRequest,
+    GetIndexResponse,
+    GetRaftMetricsSnapshotRequest,
+    GetSchemaRequest,
+    GetSchemaResponse,
+    GetTaskRequest,
+    GetTaskResponse,
+    HeartbeatRequest,
+    HeartbeatResponse,
+    ListContentRequest,
+    ListContentResponse,
+    ListExtractionPoliciesRequest,
+    ListExtractionPoliciesResponse,
+    ListExtractorsRequest,
+    ListExtractorsResponse,
+    ListIndexesRequest,
+    ListIndexesResponse,
+    ListStateChangesRequest,
+    ListTasksRequest,
+    ListTasksResponse,
+    RaftMetricsSnapshotResponse,
+    RegisterExecutorRequest,
+    RegisterExecutorResponse,
+    RegisterIngestionServerRequest,
+    RegisterIngestionServerResponse,
+    RemoveIngestionServerRequest,
+    RemoveIngestionServerResponse,
+    TaskAssignments,
+    TombstoneContentRequest,
+    TombstoneContentResponse,
+    Uint64List,
+    UpdateIndexesStateRequest,
+    UpdateIndexesStateResponse,
+    UpdateTaskRequest,
+    UpdateTaskResponse,
 };
 use internal_api::{ExtractionGraph, ExtractionGraphBuilder, ExtractionPolicyBuilder, StateChange};
 use prometheus::Encoder;
 use tokio::{
-    select, signal,
+    select,
+    signal,
     sync::{
         mpsc,
         watch::{self, Receiver, Sender},
@@ -45,8 +85,12 @@ use tonic::{Request, Response, Status, Streaming};
 use tracing::{error, info};
 
 use crate::{
-    api::IndexifyAPIError, coordinator::Coordinator, coordinator_client::CoordinatorClient,
-    garbage_collector::GarbageCollector, server_config::ServerConfig, state,
+    api::IndexifyAPIError,
+    coordinator::Coordinator,
+    coordinator_client::CoordinatorClient,
+    garbage_collector::GarbageCollector,
+    server_config::ServerConfig,
+    state,
     tonic_streamer::DropReceiver,
 };
 
@@ -69,8 +113,6 @@ impl CoordinatorServiceServer {
         &self,
         extraction_graph: &CreateExtractionGraphRequest,
     ) -> Result<ExtractionPolicyCreationResult> {
-        println!("creating extraction graph");
-        println!("the request received {:#?}", extraction_graph);
         let mut name_to_policy_mapping = HashMap::new();
         let mut parent_child_policy_mapping = HashMap::new();
         let graph_id =

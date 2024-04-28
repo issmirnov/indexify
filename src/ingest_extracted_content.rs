@@ -144,7 +144,6 @@ impl ContentStateWriting {
         state: &NamespaceEndpointState,
         payload: FinishContent,
     ) -> Result<String> {
-        println!("finishing content frame");
         let mut labels = self.content_metadata().labels.clone();
         let root_content_id = self.content_metadata().root_content_id.clone();
         let parent_id = self.content_metadata().id.clone();
@@ -178,11 +177,6 @@ impl ContentStateWriting {
                     extraction_policy_ids: HashMap::new(),
                     extraction_graph_names: vec![extraction_policy.graph_name],
                 };
-                println!(
-                    "writing coordinator metadata after finishing content frame {:#?}",
-                    content_metadata
-                );
-                println!("with the task {:#?}", self.task);
                 state
                     .data_manager
                     .create_content_and_write_features(
@@ -247,7 +241,6 @@ impl IngestExtractedContentState {
             .get_task(&payload.task_id)
             .await?
             .ok_or(anyhow!("task not found"))?;
-        println!("setting the task {:#?}", task);
         self.content_state = ContentState::Writing(ContentStateWriting::new(payload, task)?);
         Ok(())
     }
@@ -323,7 +316,6 @@ impl IngestExtractedContentState {
                             }
                         }
                         IngestExtractedContent::ExtractedFeatures(payload) => {
-                            println!("received extracted features message");
                             self.write_features(payload).await
                         }
                         IngestExtractedContent::FinishExtractedContentIngest(_) => {
@@ -562,7 +554,6 @@ mod tests {
             &self,
             content: indexify_coordinator::ContentMetadata,
         ) -> Result<()> {
-            println!("writing content");
             self.coordinator
                 .create_content_metadata(vec![content])
                 .await
