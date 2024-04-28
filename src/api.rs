@@ -691,7 +691,7 @@ pub struct UploadFileResponse {
 pub struct ExtractionGraphRequest {
     pub name: String,
     pub namespace: String,
-    pub policies: Vec<ExtractionPolicyRequest>, //  TODO: This should be ExtractionPolicyRequest
+    pub policies: Vec<ExtractionPolicyRequest>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

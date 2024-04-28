@@ -14,66 +14,26 @@ use futures::StreamExt;
 use hyper::StatusCode;
 use indexify_internal_api as internal_api;
 use indexify_proto::indexify_coordinator::{
-    self,
-    coordinator_service_server::CoordinatorService,
-    CoordinatorCommand,
-    CreateContentRequest,
-    CreateContentResponse,
-    CreateExtractionGraphRequest,
-    CreateExtractionGraphResponse,
-    CreateGcTasksRequest,
-    CreateGcTasksResponse,
-    GcTask,
-    GcTaskAcknowledgement,
-    GetAllSchemaRequest,
-    GetAllSchemaResponse,
-    GetAllTaskAssignmentRequest,
-    GetContentMetadataRequest,
-    GetContentTreeMetadataRequest,
-    GetExtractionPolicyRequest,
-    GetExtractionPolicyResponse,
-    GetExtractorCoordinatesRequest,
-    GetIndexRequest,
-    GetIndexResponse,
-    GetRaftMetricsSnapshotRequest,
-    GetSchemaRequest,
-    GetSchemaResponse,
-    GetTaskRequest,
-    GetTaskResponse,
-    HeartbeatRequest,
-    HeartbeatResponse,
-    ListContentRequest,
-    ListContentResponse,
-    ListExtractionPoliciesRequest,
-    ListExtractionPoliciesResponse,
-    ListExtractorsRequest,
-    ListExtractorsResponse,
-    ListIndexesRequest,
-    ListIndexesResponse,
-    ListStateChangesRequest,
-    ListTasksRequest,
-    ListTasksResponse,
-    RaftMetricsSnapshotResponse,
-    RegisterExecutorRequest,
-    RegisterExecutorResponse,
-    RegisterIngestionServerRequest,
-    RegisterIngestionServerResponse,
-    RemoveIngestionServerRequest,
-    RemoveIngestionServerResponse,
-    TaskAssignments,
-    TombstoneContentRequest,
-    TombstoneContentResponse,
-    Uint64List,
-    UpdateIndexesStateRequest,
-    UpdateIndexesStateResponse,
-    UpdateTaskRequest,
-    UpdateTaskResponse,
+    self, coordinator_service_server::CoordinatorService, CoordinatorCommand, CreateContentRequest,
+    CreateContentResponse, CreateExtractionGraphRequest, CreateExtractionGraphResponse,
+    CreateGcTasksRequest, CreateGcTasksResponse, GcTask, GcTaskAcknowledgement,
+    GetAllSchemaRequest, GetAllSchemaResponse, GetAllTaskAssignmentRequest,
+    GetContentMetadataRequest, GetContentTreeMetadataRequest, GetExtractionPolicyRequest,
+    GetExtractionPolicyResponse, GetExtractorCoordinatesRequest, GetIndexRequest, GetIndexResponse,
+    GetRaftMetricsSnapshotRequest, GetSchemaRequest, GetSchemaResponse, GetTaskRequest,
+    GetTaskResponse, HeartbeatRequest, HeartbeatResponse, ListContentRequest, ListContentResponse,
+    ListExtractionPoliciesRequest, ListExtractionPoliciesResponse, ListExtractorsRequest,
+    ListExtractorsResponse, ListIndexesRequest, ListIndexesResponse, ListStateChangesRequest,
+    ListTasksRequest, ListTasksResponse, RaftMetricsSnapshotResponse, RegisterExecutorRequest,
+    RegisterExecutorResponse, RegisterIngestionServerRequest, RegisterIngestionServerResponse,
+    RemoveIngestionServerRequest, RemoveIngestionServerResponse, TaskAssignments,
+    TombstoneContentRequest, TombstoneContentResponse, Uint64List, UpdateIndexesStateRequest,
+    UpdateIndexesStateResponse, UpdateTaskRequest, UpdateTaskResponse,
 };
 use internal_api::{ExtractionGraph, ExtractionGraphBuilder, ExtractionPolicyBuilder, StateChange};
 use prometheus::Encoder;
 use tokio::{
-    select,
-    signal,
+    select, signal,
     sync::{
         mpsc,
         watch::{self, Receiver, Sender},
@@ -85,12 +45,8 @@ use tonic::{Request, Response, Status, Streaming};
 use tracing::{error, info};
 
 use crate::{
-    api::IndexifyAPIError,
-    coordinator::Coordinator,
-    coordinator_client::CoordinatorClient,
-    garbage_collector::GarbageCollector,
-    server_config::ServerConfig,
-    state,
+    api::IndexifyAPIError, coordinator::Coordinator, coordinator_client::CoordinatorClient,
+    garbage_collector::GarbageCollector, server_config::ServerConfig, state,
     tonic_streamer::DropReceiver,
 };
 
@@ -113,6 +69,8 @@ impl CoordinatorServiceServer {
         &self,
         extraction_graph: &CreateExtractionGraphRequest,
     ) -> Result<ExtractionPolicyCreationResult> {
+        println!("creating extraction graph");
+        println!("the request received {:#?}", extraction_graph);
         let mut name_to_policy_mapping = HashMap::new();
         let mut parent_child_policy_mapping = HashMap::new();
         let graph_id =
@@ -255,8 +213,6 @@ impl CoordinatorService for CoordinatorServiceServer {
     ) -> Result<tonic::Response<CreateExtractionGraphResponse>, tonic::Status> {
         let request = request.into_inner();
         let graph_id = ExtractionGraph::create_id(&request.name, &request.namespace);
-        // let mut policy_ids = HashSet::new();
-        let indexes = Vec::new();
         let creation_result = self
             .create_extraction_policies_for_graph(&request)
             .map_err(|e| {
@@ -274,7 +230,8 @@ impl CoordinatorService for CoordinatorServiceServer {
             .extraction_policies(policy_ids)
             .build()
             .map_err(|e| tonic::Status::aborted(e.to_string()))?;
-        self.coordinator
+        let indexes = self
+            .coordinator
             .create_extraction_graph(graph.clone(), creation_result.extraction_policies.clone())
             .await
             .map_err(|e| tonic::Status::aborted(e.to_string()))?;
@@ -295,6 +252,10 @@ impl CoordinatorService for CoordinatorServiceServer {
             .iter()
             .flat_map(|policy| policy.output_table_mapping.clone())
             .collect();
+        let indexes = indexes
+            .into_iter()
+            .map(|index| index.into())
+            .collect::<Vec<indexify_coordinator::Index>>();
         Ok(tonic::Response::new(CreateExtractionGraphResponse {
             graph_id: graph.id,
             extractors,
@@ -719,7 +680,7 @@ impl CoordinatorService for CoordinatorServiceServer {
             })
             .collect();
         self.coordinator
-            .set_indexes_visible(indexes)
+            .update_indexes_state(indexes)
             .await
             .map_err(|e| tonic::Status::aborted(e.to_string()))?;
         Ok(Response::new(UpdateIndexesStateResponse {}))

@@ -61,6 +61,7 @@ impl VectorDb for PgVector {
 
     #[tracing::instrument]
     async fn add_embedding(&self, index: &str, chunks: Vec<VectorChunk>) -> Result<()> {
+        println!("called add_embedding in pg_vector");
         let index = PostgresIndexName::new(index);
 
         for chunk in chunks {
@@ -215,12 +216,7 @@ mod tests {
         data_manager::DataManager,
         server_config::PgVectorConfig,
         vectordbs::{
-            pg_vector::PgVector,
-            Filter,
-            FilterOperator,
-            IndexDistance,
-            VectorChunk,
-            VectorDBTS,
+            pg_vector::PgVector, Filter, FilterOperator, IndexDistance, VectorChunk, VectorDBTS,
         },
     };
 
