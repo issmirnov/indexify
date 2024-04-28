@@ -217,7 +217,12 @@ mod tests {
         data_manager::DataManager,
         server_config::PgVectorConfig,
         vectordbs::{
-            pg_vector::PgVector, Filter, FilterOperator, IndexDistance, VectorChunk, VectorDBTS,
+            pg_vector::PgVector,
+            Filter,
+            FilterOperator,
+            IndexDistance,
+            VectorChunk,
+            VectorDBTS,
         },
     };
 

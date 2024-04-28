@@ -10,13 +10,18 @@ use sha2::{
         core_api::{CoreWrapper, CtVariableCoreWrapper},
         typenum::{UInt, UTerm},
     },
-    Digest, OidSha256, Sha256, Sha256VarCore,
+    Digest,
+    OidSha256,
+    Sha256,
+    Sha256VarCore,
 };
 use tokio::io::AsyncWriteExt;
 use tracing::info;
 
 use crate::{
-    api::*, blob_storage::StoragePartWriter, data_manager::DataManager,
+    api::*,
+    blob_storage::StoragePartWriter,
+    data_manager::DataManager,
     server::NamespaceEndpointState,
 };
 
@@ -370,8 +375,14 @@ mod tests {
     use std::sync::Arc;
 
     use indexify_internal_api::{
-        ContentMetadata, ExtractionGraph, ExtractionPolicy, ExtractionPolicyContentSource,
-        ExtractorDescription, StructuredDataSchema, Task, TaskOutcome,
+        ContentMetadata,
+        ExtractionGraph,
+        ExtractionPolicy,
+        ExtractionPolicyContentSource,
+        ExtractorDescription,
+        StructuredDataSchema,
+        Task,
+        TaskOutcome,
     };
     use serde_json::json;
     use tokio::task::JoinHandle;
